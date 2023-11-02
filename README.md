@@ -1,1 +1,0 @@
-# Advantech_iDAQ
