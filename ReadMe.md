@@ -15,9 +15,15 @@ conda env create -f iDAQ_environment.yml
 
 ### 設定參數
 
+[研華科技驅動安裝與測試手冊](https://hackmd.io/pB_POm47Ska-MMRIPyNrFg?edit)
+
+```bash
+python PollingStreamingAI.py
+```
+
 在使用此程式時，您會被要求依序設定以下參數：
 
-- **deviceDescription**：設備描述 (例如：`iDAQ-817,BID#65`)
+- **deviceDescription**：設備描述 (例如：`iDAQ-817,BID#65`)，可在Advantech IDE Navigator上查詢(如圖)。
   ![螢幕擷取畫面 2023-11-02 141240](https://github.com/EduCatCode/Advantech_iDAQ/assets/148319229/2d32888c-8894-475d-8ac2-e1b3072391b5)
 - **startChannel**：起始通道 (例如：`0`)
 - **channelCount**：通道數量 (例如：`5`)
@@ -32,6 +38,10 @@ conda env create -f iDAQ_environment.yml
 **功能描述**：`RealTime_Monitor.py` 主要用於從CSV讀取數據並進行即時視覺化，從而達到即時監控的功能。
 
 ### 使用方法：
+
+```bash
+python RealTime_Monitor.py
+```
 
 1. 使用UI選擇CSV文件後，它將顯示視覺化的訊號圖表。
 2. 提供三種視覺化界面：長條圖、散點圖和時間圖。
