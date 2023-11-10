@@ -13,7 +13,7 @@ def save_data_to_csv(data, filename):
         csv_writer = csv.writer(csv_file)
         csv_writer.writerows(data)
 
-def AdvPollingStreamingAI(deviceDescription, startChannel, channelCount, sectionLength, sectionCount, split_sec):
+def AdvPollingStreamingAI(deviceDescription, startChannel, channelCount, sectionLength, sectionCount, clockRate, split_sec):
     USER_BUFFER_SIZE = channelCount * sectionLength
     profilePath = "DemoDevice.xml"
     ret = ErrorCode.Success
@@ -31,6 +31,7 @@ def AdvPollingStreamingAI(deviceDescription, startChannel, channelCount, section
         wfAiCtrl.conversion.channelCount = channelCount
         wfAiCtrl.record.sectionCount = sectionCount
         wfAiCtrl.record.sectionLength = sectionLength
+        wfAiCtrl.conversion.clockRate = clockRate 
         
         # 步驟3：開始操作
         ret = wfAiCtrl.prepare()
@@ -129,8 +130,11 @@ if __name__ == '__main__':
     print ('Please set sectionCount parameters:')
     sectionCount = int(input('sectionCount(Ex: 0):\n'))
 
+    print ('Please set clockRate parameters:')
+    clockRate = int(input('clockRate(Ex: 200000):\n'))
+    
     print ('Please set split_sec parameters:')
     split_sec = int(input('split_sec(Ex: 30):\n'))
 
-    AdvPollingStreamingAI(deviceDescription, startChannel, channelCount, sectionLength, sectionCount, split_sec)
+    AdvPollingStreamingAI(deviceDescription, startChannel, channelCount, sectionLength, sectionCount, clockRate, split_sec)
 
