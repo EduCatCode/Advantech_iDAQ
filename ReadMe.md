@@ -29,6 +29,7 @@ python PollingStreamingAI.py
 - **channelCount**：通道數量 (例如：`5`)
 - **sectionLength**：段落長度 (例如：`1024`)
 - **sectionCount**：段落計數 (例如：`0`)
+- **clockRate**: 取樣頻率(例如：`200000`)
 - **split_sec**：分割秒數 (例如：`30`)
 
 **終止程序**：使用 `Ctrl+C` 中斷程式。當程序中斷後，已儲存的CSV文件將依據您設定的時間區間進行分割。
