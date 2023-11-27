@@ -109,5 +109,26 @@ def AdvPollingStreamingAI(deviceDescription, startChannel, channelCount, section
     return 0
 
 if __name__ == '__main__':
-    # 省略了用戶輸入部分
-    pass
+    print ('Please set the necessary parameters in order')
+    print ('Please set deviceDescription parameters')
+    deviceDescription = str(input('deviceDescription(Ex: iDAQ-817,BID#65):\n'))
+
+    print ('Please set deviceDescription parameters')
+    startChannel = int(input('startChannel(Ex: 0):\n'))
+
+    print ('Please set channelCount parameters:')
+    channelCount = int(input('channelCount(Ex: 5):\n'))
+
+    print ('Please set sectionLength parameters:')
+    sectionLength = int(input('sectionLength(Ex: 1024):\n'))
+
+    print ('Please set sectionCount parameters:')
+    sectionCount = int(input('sectionCount(Ex: 0):\n'))
+
+    print ('Please set clockRate parameters:')
+    clockRate = int(input('clockRate(Ex: 200000):\n'))
+
+    print ('Please set split_sec parameters:')
+    split_sec = int(input('split_sec(Ex: 30):\n'))
+
+    AdvPollingStreamingAI(deviceDescription, startChannel, channelCount, sectionLength, sectionCount, clockRate, split_sec)
