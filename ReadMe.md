@@ -87,4 +87,20 @@ python RealTime_Monitor.py
 ![image](https://github.com/EduCatCode/Advantech_iDAQ/assets/148319229/b142d788-a0b6-479a-88c7-9f959e3df521)
 
 
+
+## 5. 提供其他版本
+
+![f50fb072-13ac-4750-87ee-7a588ef5091c](https://github.com/EduCatCode/Advantech_iDAQ/assets/148319229/fda72e77-53d5-49e7-920c-1107ac5c2a8b)
+
+[監測系統效能比較與改善：CSV檔案與SQLite數據庫的數據讀取](https://hackmd.io/@p8GEfhxoRceI9GiueC5ltA/BkW806GrT)
+
+
+- **CSV檔案法**：雖然數據更新速度隨檔案增大而變慢，但圖表繪製速度穩定。
+  
+  - **1. 隨後切割法 (Sequential Splitting Method)** : 在此方法中，系統首先將所有讀取到的數據寫入單一CSV檔案。當使用者使用 Ctrl+C 中斷程式後，系統將根據使用者設定的時間區間，將該CSV檔案分割成多個較小的檔案。這種方法允許持續不斷的數據記錄，直到明確的中斷命令發出，之後才進行檔案的分割，適合於那些需要長時間連續記錄，但又希望在記錄結束後便於管理的場景。
+     
+  - **2. 即時分割法 (Real-time Splitting Method)** : 在即時分割法中，系統會根據使用者設定的時間區間自動結束當前CSV檔案的寫入，並立即開啟一個新的CSV檔案進行數據寫入。這個過程會一直持續到使用者使用 Ctrl+C 中斷程式後。這種方法適合於需要定期產生新檔案的應用，例如實時監控系統，可以即時地將數據分割儲存，方便用戶實時查看和處理最新數據。
+   
+- **SQLite數據庫法**：提供了更快的數據更新速度，但圖表繪製存在延遲，且此延遲與檔案大小無關。
+
 請依照上述步驟進行操作，如果遇到任何疑問，歡迎隨時聯繫我。
