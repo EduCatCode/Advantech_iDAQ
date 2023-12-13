@@ -7,7 +7,7 @@
 為了設定必要的執行環境，請使用以下的 `conda` 命令：
 
 ```bash
-conda env create -f iDAQ_environment.yml
+conda env create -f iDAQ_environment.yaml
 ```
 ## 2. PollingStreamingAI
 
