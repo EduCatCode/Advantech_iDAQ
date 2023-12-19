@@ -5,6 +5,12 @@ import os
 from tkinter import Tk, Button, filedialog, Frame, IntVar, Checkbutton, Label
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
+# 使用模型預測
+def predict(model, data):
+    result = model.predict(data)
+    return result
+
+# 清除所有文字框
 def clear_checks():
     global check_vars, channel_checks, value_labels
     for check in channel_checks:
@@ -15,6 +21,7 @@ def clear_checks():
     channel_checks = []  # 清空Checkbutton列表
     value_labels = {}  # 清空數值標籤字典
 
+#繪製圖表  
 def plot_graph():
     global dir_path, is_paused, check_vars, channel_checks, value_labels
     is_paused = False
@@ -37,17 +44,18 @@ def plot_graph():
     for i, column_name in enumerate(df.columns):
         var = IntVar(value=1)
         check = Checkbutton(button_frame, text=column_name, variable=var)
-        label = Label(button_frame, text=f'{column_name}: N/A')
+        #label = Label(button_frame, text=f'{column_name}: N/A')
         row = i // max_columns + 1
         column = i % max_columns
         check.grid(row=row, column=column*2, padx=5, pady=5)
-        label.grid(row=row, column=column*2+1, padx=5, pady=5)
+        #label.grid(row=row, column=column*2+1, padx=5, pady=5)
         check_vars.append(var)
         channel_checks.append(check)
-        value_labels[column_name] = label
+        #value_labels[column_name] = label
 
     update_graph()
 
+#更新圖表
 def update_graph():
     global dir_path, check_vars, value_labels, df
     if is_paused or not dir_path:
@@ -79,58 +87,73 @@ def update_graph():
         window.after(500, update_graph)
         return
 
-
     if df.shape[0] < 1:
         print("CSV file must have at least one row.")
         return
 
-    df = df.tail(10000).reset_index(drop=True)  
+    # 缩减数据集到最后 51200 行
+    df = df.tail(51200).reset_index(drop=True)  
     ax.clear()
     sns.set_theme(style="whitegrid")
       
     if 'timestamp' in df.columns:
         df = df.drop(columns='timestamp')
 
+    # 繪製點選的數據折線圖
     for i, (column_name, data) in enumerate(df.items()):
         if i < len(check_vars) and check_vars[i].get() == 1:
             if pd.api.types.is_numeric_dtype(data):
                 sns.lineplot(x=df.index, y=data, ax=ax, label=column_name)
-                value_labels[column_name].config(text=f'{column_name}: {data.iloc[-1]:.4f}')
-            else:
-                print(f"Warning: The column '{column_name}' contains non-numeric data and cannot be plotted.")
-    
+            #     value_labels[column_name].config(text=f'{column_name}: {data.iloc[-1]:.4f}')
+            # else:
+            #     print(f"Warning: The column '{column_name}' contains non-numeric data and cannot be plotted.")
+
+    # 更新 'Prediction' 行的標籤 (顯示最後一個值(每個值都是一樣的))
+    if 'Prediction' in df.columns:
+        last_prediction = df['Prediction'].iloc[-1]  
+        prediction_display.config(text=str(last_prediction))  # 更新顯示框
+
+    set_chart(ax, fig, canvas)    
+    window.after(1000, update_graph)
+
+# 設置圖表
+def set_chart(ax, fig, canvas):
     ax.set_xlabel('Time Step')
     ax.set_ylabel('Value')
     ax.legend(loc='center right', bbox_to_anchor=(1.25, 0.5))
     fig.tight_layout()
     canvas.draw()
-    window.after(1000, update_graph)
 
+
+# 暫停繪製圖表
 def toggle_pause():
     global is_paused
     is_paused = not is_paused
 
+# 停止繪製表
 def stop_graph():
     window.quit()
 
+
+# 主函數
 # Tkinter視窗和配置
 window = Tk()
 window.title("Real-Time Machine Monitoring System")
 window.geometry('')  # 空字符串將允許窗口根據內容自動調整大小
 window.iconbitmap('EduCatCode.ico')
 
-# 初始化全局變數
+# 初始化全域變數
 file_path = ""
 is_paused = False
 check_vars = []  # 儲存Checkbutton的變量
 channel_checks = []  # 儲存Checkbutton的對象
 value_labels = {}  # 儲存數值標籤的字典
 
-# 創建Matplotlib圖表和布局
+# 創建Matplotlib圖表和佈局
 fig, ax = plt.subplots(figsize=(10, 5))
 canvas = FigureCanvasTkAgg(fig, master=window)
 canvas.get_tk_widget().pack(side="top", fill="both", expand=True, padx=20, pady=20)
-
+    
 button_frame = Frame(window)
 button_frame.pack(padx=20, pady=20)
 
@@ -140,8 +163,15 @@ plot_button.grid(row=0, column=1, padx=5, pady=5)
 
 pause_button = Button(button_frame, text="Pause/Resume", command=toggle_pause)
 pause_button.grid(row=0, column=3, padx=5, pady=5)
-
+    
 stop_button = Button(button_frame, text="Stop and Close", command=stop_graph)
 stop_button.grid(row=0, column=5, padx=5, pady=5)
 
+# 新增顯示AI預測結果的標籤和顯示框
+prediction_label = Label(window, text="建議操作:")
+prediction_label.pack(padx=5, pady=5)
+prediction_display = Label(window, text="N/A")
+prediction_display.pack(padx=5, pady=5)
+
 window.mainloop()
+
