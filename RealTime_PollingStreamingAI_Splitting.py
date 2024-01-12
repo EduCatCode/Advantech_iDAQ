@@ -1,223 +1,307 @@
-import sys
+import os
 import csv
-import pandas as pd
-sys.path.append('..')
-import datetime
+from tqdm import tqdm
+from Automation.BDaq import *
 from datetime import datetime
 from CommonUtils import kbhit
-from Automation.BDaq import *
+from typing import Any, List, Tuple
 from Automation.BDaq.WaveformAiCtrl import WaveformAiCtrl
 from Automation.BDaq.BDaqApi import AdxEnumToString, BioFailed
 from Automation.BDaq.DeviceCtrl import DeviceCtrl
-from joblib import load
-import M100
-from collections import Counter
-import time
+from Automation.BDaq import DeviceInformation, IepeType, CouplingType, AiSignalType
 
-def load_model(model_path):
-    return load(model_path)
-    
+def list_all_supported_devices() -> List[str]:
+    """
+    List all supported devices and return their descriptions.
 
+    Returns:
+        List[str]: List of device descriptions.
+    """
+    device_ctrl = DeviceCtrl(None)
+    descriptions = [device.Description for device in device_ctrl.installedDevices]
 
-def model_predict(model, data):
-    predictions = model.predict(data)
-    # 計算眾數
-    count = Counter(predictions.flatten()) 
-    most_common = count.most_common()
+    print(f'Available Device count = {len(device_ctrl.installedDevices)}')
+    for index, description in enumerate(descriptions):
+        print(f'[{index}] {description}')
 
-    # 檢查是否有多個眾數(數量相同)
-    if len(most_common) > 1 and most_common[0][1] == most_common[1][1]:
-        return 1  # 如果是，則返回 1
+    return descriptions
+
+def get_device_description_by_index(index: int, descriptions: List[str]) -> str:
+    """
+    Get device description by index.
+
+    Args:
+        index (int): The index of the device in the list.
+        descriptions (List[str]): List of device descriptions.
+
+    Returns:
+        str: Device description corresponding to the index.
+    """
+    if 0 <= index < len(descriptions):
+        return descriptions[index]
     else:
-        return most_common[0][0]  # 否則返回最常見的元素
+        raise ValueError("Invalid device index.")
 
 
 
-def List_all_supported_device():
+def save_data_to_csv(data: List[List[Any]], filename: str) -> None:
+    """
+    Save given data to a CSV file.
 
-    deviceCtrl = DeviceCtrl(None)
-    Description = []
-    print(f'Available Device count = {len(deviceCtrl.installedDevices)}')
-    i = 0
-    for device in deviceCtrl.installedDevices:
-        Description.append(device.Description)
-        i += 1
-    print(Description)
-    return 
+    Args:
+        data (List[List[Any]]): A list of rows, where each row is a list of data items.
+        filename (str): The name of the file to save the data to.
 
-def save_data_to_csv(data, filename):
-    
+    Returns:
+        None
+    """
     with open(filename, 'w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
         csv_writer.writerows(data)
 
-def AdvPollingStreamingAI(deviceDescription, startChannel, channelCount, sectionLength, sectionCount, clockRate, split_sec):
-    
-    # 載入模型
-    model = load_model(r'D:\c.Project\d.Chung_Yang\Model\20231215\Support_Vector_Machines.joblib')  # 加載模型
 
-    USER_BUFFER_SIZE = channelCount * sectionLength
-    profilePath = "DemoDevice.xml"
+def open_new_csv_file(formatted_date: str, channel_count: int) -> Tuple:
+    """
+    Opens a new CSV file for writing data.
+
+    Args:
+        formatted_date (str): The formatted date string to be used in the filename.
+        channel_count (int): The number of channels to be recorded in the CSV file.
+
+    Returns:
+        Tuple: A tuple containing the opened file object and the CSV writer object.
+    """
+    
+    file = open(formatted_date, "w", newline='')
+    writer = csv.writer(file)
+    columns = ['timestamp'] + [f'channel{i}' for i in range(channel_count)]
+    writer.writerow(columns)
+
+    return file, writer
+
+def handle_csv_file_splitting(csv_file, current_time: datetime, channel_count: int, date_dir: str) -> Tuple:
+    """
+    Handles the splitting of the CSV file.
+
+    Args:
+        csv_file: The currently open CSV file.
+        current_time (datetime): The current time.
+        channel_count (int): The number of channels in the data.
+        date_dir (str): The directory where the new CSV file should be saved.
+
+    Returns:
+        Tuple: A tuple containing the newly opened file object and the CSV writer object.
+    """
+    csv_file.close()
+    formatted_date = current_time.strftime('%Y%m%d%H%M%S')
+    csv_filename = os.path.join(date_dir, f"{formatted_date}.csv")
+    return open_new_csv_file(csv_filename, channel_count)
+
+def close_file(file) -> None:
+    """
+    Closes the given file.
+
+    Args:
+        file: The file to be closed.
+    """
+    if file is not None:
+        file.close()
+
+def stop_acquisition(wf_ai_ctrl, csv_file, start_time, row_count, all_data) -> None:
+    """
+    Stops the data acquisition.
+
+    Args:
+        wf_ai_ctrl: The waveform AI controller used for data acquisition.
+    """
+    close_file(csv_file)
+    wf_ai_ctrl.stop()
+    end_time = datetime.now()
+    elapsed_time = (end_time - start_time).total_seconds()
+    sampling_rate = row_count / elapsed_time
+    print(f"Elapsed Time: {elapsed_time} seconds")
+    print(f"Sampling Rate: {sampling_rate} rows per second")
+    rows_per_file = int(split_sec * sampling_rate)  
+    formatted_date = start_time.strftime('%Y%m%d%H%M%S')
+    for i in range(0, len(all_data), rows_per_file):
+        chunk = all_data[i:i+rows_per_file]
+        filename = os.path.join(os.getcwd(), f'{formatted_date}({i // rows_per_file + 1}).csv')
+        save_data_to_csv(chunk, filename)
+
+def get_user_input(prompt: str, type_func = str) -> any:
+    """
+    Prompts the user for input and converts it to the specified type.
+
+    Args:
+    prompt (str): The prompt to display to the user.
+    type_func (function): The function to convert the input to the desired type.
+
+    Returns:
+    any: The user input converted to the specified type.
+    """
+    while True:
+        try:
+            return type_func(input(prompt))
+        except ValueError:
+            print("Invalid input. Please try again.")
+
+
+def device_data_acquisition(config):
+    # Unpack device configuration
+    device_description, start_channel, channel_count, section_length, section_count, clock_rate, split_sec, iepe = config
+
+    # Call the adv_polling_streaming_ai function and pass it the unpacked arguments
+    adv_polling_streaming_ai(device_description, start_channel, channel_count, section_length, section_count, clock_rate, split_sec, iepe)
+
+
+
+
+def adv_polling_streaming_ai(device_description: str, start_channel: int, channel_count: int, 
+                             section_length: int, section_count: int, clock_rate: int, 
+                             split_sec: int, iepe: bool) -> None:
+    """
+    Advanced polling streaming AI.
+
+    Args:
+    device_description (str): Description of the device.
+    start_channel (int): Starting channel number.
+    channel_count (int): Number of channels.
+    section_length (int): Length of each section.
+    section_count (int): Number of sections.
+    clock_rate (int): Clock rate.
+    split_sec (int): Time in seconds to split the data.
+    iepe (bool): IEPE status.
+    """
+
+    user_buffer_size = channel_count * section_length
     ret = ErrorCode.Success
 
-    # 初始化
-    csv_file = None  
-    start_time = datetime.now()  
-    row_count = 0  
+    base_dir = os.path.join(os.getcwd(), device_description)
+    os.makedirs(base_dir, exist_ok=True)
+
+    # 創建以當前日期為名的子目錄
+    date_str = datetime.now().strftime('%Y%m%d')
+    date_dir = os.path.join(base_dir, f"{date_str}_1")
+    counter = 2
+    while os.path.exists(date_dir):
+        # 如果當天目錄已存在，則創建帶編號的新目錄
+        date_dir = os.path.join(base_dir, f"{date_str}_{counter}")
+        counter += 1
+
+    os.makedirs(date_dir, exist_ok=True)
+
+    # Initialize variables
+    csv_file = None
+    start_time = datetime.now()
+    row_count = 0
     
-    # 步驟1：創建一個'WaveformAiCtrl'用於暫存功能
-    wfAiCtrl = WaveformAiCtrl(deviceDescription)
+    # Step 1: Create a 'WaveformAiCtrl' for caching
+    wf_ai_ctrl = WaveformAiCtrl(device_description)
 
 
     for _ in range(1):
+        # 步驟2：傳入必要的參數(裝置名稱、開始頻道、頻道數量、緩存大小、緩存數量、取樣率)
+        wf_ai_ctrl.conversion.channelStart = start_channel
+        wf_ai_ctrl.conversion.channelCount = channel_count
+        wf_ai_ctrl.record.sectionCount = section_count
+        wf_ai_ctrl.record.sectionLength = section_length
+        wf_ai_ctrl.conversion.clockRate = clock_rate
 
-        # 載入配置文件以初始化設備
-        wfAiCtrl.loadProfile = profilePath 
+        # 設定IEPE (IEPE打開 需要設定連接類型:偽差分 耦合:交流耦合 壓電集成電路:2mA )
+        iepe_type = IepeType(3 if iepe else 0)
+        coupling_type = CouplingType(1 if iepe else 0)
+        signal_type = AiSignalType(2 if iepe else 1)
 
-        # 步驟2：設置必要的參數
-        wfAiCtrl.conversion.channelStart = startChannel
-        wfAiCtrl.conversion.channelCount = channelCount
-        wfAiCtrl.record.sectionCount = sectionCount
-        wfAiCtrl.record.sectionLength = sectionLength
-        wfAiCtrl.conversion.clockRate = clockRate 
-        
+        wf_ai_ctrl.selectedDevice = DeviceInformation(device_description)
+        channel_names = [str(channel.logicalNumber) for channel in wf_ai_ctrl.channels]
+
+        for channel_name in channel_names:
+            channel = wf_ai_ctrl.channels[int(channel_name)]
+            channel.iepeType = iepe_type
+            channel.couplingType = coupling_type
+            channel.signalType = signal_type
+
         # 步驟3：開始操作
-        ret = wfAiCtrl.prepare()
+        ret = wf_ai_ctrl.prepare()
         if BioFailed(ret):
             break
 
-        ret = wfAiCtrl.start()
+        ret = wf_ai_ctrl.start()
         if BioFailed(ret):
             break
 
         all_data = []
 
         try:
-            # 獲取當前的日期和時間
             now = datetime.now()
-            file_start_time = now  # 記錄檔案開始時間
+            file_start_time = now
             formatted_date = now.strftime('%Y%m%d%H%M%S') 
-            csv_file = open(f"{formatted_date}.csv", "w", newline='')
-            csv_writer = csv.writer(csv_file)
-
-            # 生成特徵名並寫入CSV
-            columns = ['timestamp'] + [f'channel{i}' for i in range(channelCount)]
-            csv_writer.writerow(columns)
-
-
-            # 步驟4：設備以輪詢方式採集數據
+            csv_filename = os.path.join(date_dir, f"{formatted_date}.csv")
+            csv_file, csv_writer = open_new_csv_file(csv_filename, channel_count)
             print("Polling infinite acquisition is in progress, any key to quit!")
-        
+    
+            # Initialize progress bar
+            pbar = tqdm(total=split_sec, desc="Retrieval progress", leave=True)
+
             while not kbhit():
-                result = wfAiCtrl.getDataF64(USER_BUFFER_SIZE, -1)
-                ret, returnedCount, data, = result[0], result[1], result[2]
+                result = wf_ai_ctrl.getDataF64(user_buffer_size, -1)
+                ret, returned_count, data = result[0], result[1], result[2]
                 if BioFailed(ret):
                     break
 
-                for i in range(0, returnedCount, channelCount):
+                # 更新進度條
+                elapsed_time = (datetime.now() - file_start_time).total_seconds()
+                pbar.update(elapsed_time - pbar.n)
+
+                for i in range(0, returned_count, channel_count):
                     current_time = datetime.now()
-                    row_data = [current_time.strftime('%Y-%m-%d %H:%M:%S.%f')]
-                    for j in range(channelCount):
-                        index = i + j
-                        if index < len(data):
-                            row_data.append(data[index])
-
+                    row_data = [current_time.strftime('%Y-%m-%d %H:%M:%S.%f')] + data[i:i+channel_count]
                     csv_writer.writerow(row_data)
-                    row_count += channelCount
-
+                    row_count += channel_count
 
                     if (current_time - file_start_time).total_seconds() >= split_sec:
-                        df = pd.read_csv(f'{formatted_date}.csv')
-                        SignalFeatures = M100.SignalFeatures(df['channel0'].values, 51200)
-                        df_pre = SignalFeatures.preprocessing()
+                        csv_file, csv_writer = handle_csv_file_splitting(csv_file, current_time, channel_count, date_dir)
 
-                        prediction = model_predict(model, df_pre)
-
-                        # 根据预测值更新状态信息
-                        if prediction == 1.0:
-                            prediction_text = '刀具狀況良好'
-                        elif prediction == 0.0:
-                            prediction_text = '請更換刀具'
-                        else:
-                            prediction_text = '未知狀態'  # 可以根据需要调整
-
-                        print('預測結果：', prediction_text)
-
-                        # 将预测信息添加到数据帧
-                        df['Prediction'] = prediction_text
-
-                        try:
-                            
-                            df.to_csv(f'{formatted_date}.csv', index=False, encoding='utf-8-sig')
-                            print(f'預測結果及狀態已新增至csv文件: {formatted_date}.csv')
-                        except Exception as e:
-                            print(f'寫入csv文件時發生錯誤: {e}')       
-
-                        # 然後關閉原文件
-                        csv_file.close()
+                        # 重置進度條
+                        pbar.reset()
     
                         file_start_time = current_time
                         formatted_date = current_time.strftime('%Y%m%d%H%M%S')
-                        csv_file = open(f"{formatted_date}.csv", "w", newline='')
-                        csv_writer = csv.writer(csv_file)
-                        csv_writer.writerow(columns)
+                        csv_filename = os.path.join(date_dir, f"{formatted_date}.csv")
+                        csv_file, csv_writer = open_new_csv_file(csv_filename, channel_count)
 
         except KeyboardInterrupt:
-            if csv_file:
-                csv_file.close()  # 確保關閉文件
-            
-            # 步驟6：如果正在運作則停止操作
-            ret = wfAiCtrl.stop()
-            end_time = datetime.now()
-            elapsed_time = (end_time - start_time).total_seconds()
-            sampling_rate = row_count / elapsed_time
-            print(f"Elapsed Time: {elapsed_time} seconds")
-            print(f"Sampling Rate: {sampling_rate} rows per second")
-            rows_per_file = int(split_sec * sampling_rate)  # 計算每個文件的行數
-            formatted_date = start_time.strftime('%Y%m%d%H%M%S')
-            for i in range(0, len(all_data), rows_per_file):
-                chunk = all_data[i:i+rows_per_file]
-                save_data_to_csv(chunk, f'{formatted_date}({i // rows_per_file + 1}).csv')
-        
+            stop_acquisition(wf_ai_ctrl, start_time, row_count, all_data)
+
         finally:
-            if csv_file:
-                csv_file.close()  # 再次確保關閉文件
+            pbar.close()
+            close_file(csv_file)
 
+    # Step 7: Shut down the device and release all allocated resources
+    wf_ai_ctrl.dispose()
 
-
-
-    # 步驟 7: 關閉設備，釋放所有分配的資源
-    wfAiCtrl.dispose()
-
-        # 如果執行中出現問題，將錯誤代碼列印在螢幕上以便跟踪
+    # If a problem occurs during execution, print the error code on the screen for tracking
     if BioFailed(ret):
         enumStr = AdxEnumToString("ErrorCode", ret.value, 256)
         print("Some error occurred. And the last error code is %#x. [%s]" % (ret.value, enumStr))
     return 0
 
-# 在主函數或程式的適當位置
+# Single device use
+
 if __name__ == '__main__':
-    List_all_supported_device()
-    print ('Please set deviceDescription parameters')
-    deviceDescription = str(input('deviceDescription(Ex: iDAQ-817,BID#65):\n'))
-
-    print ('Please set deviceDescription parameters')
-    startChannel = int(input('startChannel(Ex: 0):\n'))
-
-    print ('Please set channelCount parameters:')
-    channelCount = int(input('channelCount(Ex: 5):\n'))
-
-    print ('Please set sectionLength parameters:')
-    sectionLength = int(input('sectionLength(Ex: 1024):\n'))
-
-    print ('Please set sectionCount parameters:')
-    sectionCount = int(input('sectionCount(Ex: 0):\n'))
-
-    print ('Please set clockRate parameters:')
-    clockRate = int(input('clockRate(Ex: 200000):\n'))
     
-    print ('Please set split_sec parameters:')
-    split_sec = int(input('split_sec(Ex: 30):\n'))
+    # User input parameters
+    descriptions = list_all_supported_devices()
+    device_index = get_user_input('Please select device by index (e.g., 0 for the first device):\n', int)
+    device_description = get_device_description_by_index(device_index, descriptions)
+    start_channel = get_user_input('Please set startChannel (Ex: 0):\n', int)
+    channel_count = get_user_input('Please set channelCount (Ex: 5):\n', int)
+    section_length = get_user_input('Please set sectionLength (Ex: 1024):\n', int)
+    section_count = get_user_input('Please set sectionCount (Ex: 0):\n', int)
+    clock_rate = get_user_input('Please set clockRate (Ex: 200000):\n', int)
+    split_sec = get_user_input('Please set split_sec (Ex: 30):\n', int)
+    iepe_input = get_user_input('Please set iepe (True or False):\n')
+    iepe = iepe_input.lower() in ['true', '1', 'yes', 'y', 't', 'T', 'True', 'TRUE', 'YES', 'Yes']
 
-    AdvPollingStreamingAI(deviceDescription, startChannel, channelCount, sectionLength, sectionCount, clockRate, split_sec)
-
+    # Call function
+    adv_polling_streaming_ai(device_description, start_channel, channel_count, section_length, section_count, clock_rate, split_sec, iepe)
